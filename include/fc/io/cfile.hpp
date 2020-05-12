@@ -38,6 +38,10 @@ public:
 
    bool is_open() const { return _open; }
 
+   static constexpr const char* create_or_update_rw_mode = "ab+";
+   static constexpr const char* update_rw_mode = "rb+";
+   static constexpr const char* truncate_rw_mode = "wb+";
+
    /// @param mode is any mode supported by fopen
    ///        Tested with:
    ///         "ab+" - open for binary update - create if does not exist
@@ -50,8 +54,12 @@ public:
       _open = true;
    }
 
-   long tellp() const {
-      return ftell( _file.get() );
+   size_t tellp() const {
+      long result = ftell( _file.get() );
+      if (result == -1)
+         throw std::ios_base::failure("cfile: " + get_file_path().generic_string() +
+                                      " unable to get the current position of the file, error: " + std::to_string( errno ));
+      return static_cast<size_t>(result);
    }
 
    void seek( long loc ) {
@@ -92,6 +100,19 @@ public:
       }
    }
 
+   void sync() {
+      const int fd = fileno(_file.get() );
+      if( -1 == fd ) {
+         throw std::ios_base::failure( "cfile: " + _file_path.generic_string() +
+                                       " unable to convert file pointer to file descriptor, error: " +
+                                       std::to_string( errno ) );
+      }
+      if( -1 == fsync( fd ) ) {
+         throw std::ios_base::failure( "cfile: " + _file_path.generic_string() +
+                                       " unable to sync file, error: " + std::to_string( errno ) );
+      }
+   }
+
    void close() {
       _file.reset();
       _open = false;
@@ -128,7 +149,9 @@ public:
 
    bool get( char& c ) { return read(&c, 1); }
 
-private:
+   size_t tellp() const { return cf.tellp(); }
+
+ private:
    cfile& cf;
 };
 
